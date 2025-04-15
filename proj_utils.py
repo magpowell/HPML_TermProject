@@ -5,7 +5,7 @@ import torch
 import torchvision
 import torch.nn as nn
 import matplotlib.pyplot as plt
-
+import wandb
 
 from collections import OrderedDict
 
@@ -45,6 +45,7 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
             rmse[i] = weighted_rmse_channels(pred, tar) * std
             acc[i] = weighted_acc_channels(pred-m, tar-m)
             print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
+            wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx]})
 
             pred = future_pred
             tar = future
