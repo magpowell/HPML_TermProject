@@ -1,0 +1,3 @@
+[submodule "FourCastNet"]
+	path = FourCastNet
+	url = git@github.com:NVlabs/FourCastNet.git
