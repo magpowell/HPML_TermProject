@@ -37,7 +37,7 @@ global_stds_path = f"{base_path}ccai_demo/additional/stats_v0/global_stds.npy"
 time_means_path = f"{base_path}ccai_demo/additional/stats_v0/time_means.npy"
 land_sea_mask_path = f"{base_path}ccai_demo/additional/stats_v0/land_sea_mask.npy"
 
-os.environ["WANDB_NOTEBOOK_NAME"] = './base_notebook.ipynb' # this will be the name of the notebook in the wandb project database
+os.environ["WANDB_NOTEBOOK_NAME"] = './base_script.py' # this will be the name of the notebook in the wandb project database
 wandb.login()
 run = wandb.init(
     project="weather-forecast-inference",    # Specify your project
