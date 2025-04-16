@@ -1,5 +1,6 @@
 # HPML_TermProject
 CS HPML Spring 2025 Term Project
+Team members: Margaret Powell, Jacob Halpern, Amelia Chambliss
 
 ## Objective:
 Numerical weather prediction is used to forecast environmental conditions from present to several weeks into the future. It is a computationally expensive and challenging task, with prediction skill decreasing with time. Traditionally, physics-based numerical models are used for this task and require hundreds of hours on a supercomputer to produce a single forecast. Deep learning has provided major advances in recent years, with ML-based models from Google [2], NVIDIA [3], Huawei [1], and others outperforming traditional models in terms of forecast accuracy. Once trained, these models can produce a forecast in seconds. 
