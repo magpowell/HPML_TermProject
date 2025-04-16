@@ -1,5 +1,6 @@
 # HPML_TermProject
 CS HPML Spring 2025 Term Project
+
 Team members: Margaret Powell, Jacob Halpern, Amelia Chambliss
 
 ## Objective:
