@@ -24,7 +24,6 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
     targets = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
     predictions = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
 
-    start_time = time.time()
     total_time = 0
     with torch.no_grad():
         for i in range(data_slice.shape[0]):
