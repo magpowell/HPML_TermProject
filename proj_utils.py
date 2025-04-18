@@ -71,6 +71,7 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
 
 def load_model(model, params, checkpoint_file):
     ''' helper function to load model weights '''
+    load_time_start = time.perf_counter()
     checkpoint_fname = checkpoint_file
     checkpoint = torch.load(checkpoint_fname, weights_only=False)
     try:
@@ -86,6 +87,9 @@ def load_model(model, params, checkpoint_file):
     except:
         model.load_state_dict(checkpoint['model_state'])
     model.eval() # set to inference mode
+    load_time_end = time.perf_counter()
+    load_time = load_time_start - load_time_end
+    print(f"Load time: {load_time} seconds")
     return model
 
 def lat(j: torch.Tensor, num_lat: int) -> torch.Tensor:
