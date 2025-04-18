@@ -27,7 +27,7 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
     total_time = 0
     with torch.no_grad():
         for i in range(data_slice.shape[0]):
-            iter_start = time.time()
+            iter_start = time.perf_counter()
             if i == 0:
                 first = data_slice[0:1]
                 future = data_slice[1:2]
@@ -50,7 +50,8 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
             # compute metrics using the ground truth ERA5 data as "true" predictions
             rmse[i] = weighted_rmse_channels(pred, tar) * std
             acc[i] = weighted_acc_channels(pred-m, tar-m)
-            iter_time = time.time() - iter_start
+            iter_end = time.perf_counter()
+            iter_time = iter_end - iter_start
             print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
             wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
 
@@ -88,7 +89,7 @@ def load_model(model, params, checkpoint_file):
         model.load_state_dict(checkpoint['model_state'])
     model.eval() # set to inference mode
     load_time_end = time.perf_counter()
-    load_time = load_time_start - load_time_end
+    load_time = load_time_end - load_time_start
     print(f"Load time: {load_time} seconds")
     return model
 
