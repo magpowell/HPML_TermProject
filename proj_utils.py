@@ -51,7 +51,7 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
             rmse[i] = weighted_rmse_channels(pred, tar) * std
             acc[i] = weighted_acc_channels(pred-m, tar-m)
             iter_time = time.time() - iter_start
-            print(f'Predicted timestep {i} of {prediction_length}. {field} RMS Error: {rmse[i,idx]:.4f}, ACC: {acc[i,idx]:.4f}, Time: {iter_time:.2f}s')
+            print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
             wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
 
             pred = future_pred
