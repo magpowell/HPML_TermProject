@@ -20,6 +20,7 @@ from proj_utils import load_model, inference, lat, latitude_weighting_factor, we
 from distributed_utils import inference_ensemble
 
 PLOT_INPUTS = False # to get a sample plot
+COMPILE = True # to use torch.compile()
 
 # DO THIS WITHIN YOUR SCRATCH AND SET PATH
 # wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
@@ -83,6 +84,8 @@ else:
 # load saved model weights
 model = load_model(model, params, model_path)
 model = model.to(device)
+if COMPILE:
+    model = torch.compile(model, backend = 'inductor')
 
 # move normalization tensors to gpu
 # load time means: represents climatology

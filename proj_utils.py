@@ -10,6 +10,11 @@ import wandb
 from collections import OrderedDict
 
 def inference(data_slice, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field):
+    # torch.compile warmup
+    with torch.no_grad():
+        dummy_input = torch.randn(1, data_slice.shape[1], img_shape_x, img_shape_y).to(device)
+        _ = model(dummy_input)
+
     # create memory for the different stats
     n_out_channels = params['N_out_channels']
     acc = torch.zeros((prediction_length, n_out_channels)).to(device, dtype=torch.float)
@@ -19,9 +24,10 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
     targets = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
     predictions = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
 
-
+    total_time = 0
     with torch.no_grad():
         for i in range(data_slice.shape[0]):
+            iter_start = time.time()
             if i == 0:
                 first = data_slice[0:1]
                 future = data_slice[1:2]
@@ -44,11 +50,16 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
             # compute metrics using the ground truth ERA5 data as "true" predictions
             rmse[i] = weighted_rmse_channels(pred, tar) * std
             acc[i] = weighted_acc_channels(pred-m, tar-m)
+            iter_time = time.time() - iter_start
             print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
-            wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx]})
+            wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
 
             pred = future_pred
             tar = future
+            total_time += iter_time
+
+    print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
+    wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
 
     # copy to cpu for plotting/vis
     acc_cpu = acc.cpu().numpy()
