@@ -69,7 +69,7 @@ def load_data_and_model(base_path, params):
 @click.option(
     "--reduce_overhead", is_flag=True, help="reduce_overhead for torch.compile()"
 )
-@click.option("--max_autotune", is_flag=True, help="max_autotune for torch.compile()")
+@click.option("--eager", is_flag=True, help="eager backend for torch.compile()")
 @click.option(
     "--base_path",
     default="/pscratch/sd/m/mpowell/hpml/",
@@ -81,7 +81,7 @@ def load_data_and_model(base_path, params):
     type=str,
     help="file path for csv with results",
 )
-def main(use_compile, reduce_overhead, max_autotune, base_path, file_path):
+def main(use_compile, reduce_overhead, eager, base_path, file_path):
     # default
     params = YParams(config_file, config_name)
     print("Model architecture used = {}".format(params["nettype"]))
@@ -93,8 +93,8 @@ def main(use_compile, reduce_overhead, max_autotune, base_path, file_path):
     if use_compile:
         if reduce_overhead:
             model = torch.compile(model, backend="inductor", mode="reduce-overhead")
-        elif max_autotune:
-            return # not setup yet
+        elif eager:
+            model = torch.compile(model, backend="eager")
         else:
             model = torch.compile(model, backend="inductor")
 
@@ -164,7 +164,7 @@ def main(use_compile, reduce_overhead, max_autotune, base_path, file_path):
                 "avg_accuracy": [np.mean(acc)],
                 "avg_rmse": [np.mean(rmse)],
                 "compiled": [use_compile],
-                "max_autotune": [max_autotune],
+                "eager": [eager],
                 "reduce_overhead": [reduce_overhead],
             }
         )
