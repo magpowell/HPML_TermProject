@@ -57,9 +57,9 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
             pred = future_pred
             tar = future
             total_time += iter_time
-
-    print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
-    wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
+    avg_time = total_time/prediction_length
+    print(f'Total inference time: {total_time:.2f}s, Average time per step: {avg_time:.2f}s')
+    wandb.log({"total_inference_time": total_time, "avg_step_time":avg_time})
 
     # copy to cpu for plotting/vis
     acc_cpu = acc.cpu().numpy()
@@ -67,7 +67,7 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
     predictions_cpu = predictions.cpu().numpy()
     targets_cpu = targets.cpu().numpy()
 
-    return acc_cpu, rmse_cpu, predictions_cpu, targets_cpu
+    return total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu
 
 def load_model(model, params, checkpoint_file):
     ''' helper function to load model weights '''

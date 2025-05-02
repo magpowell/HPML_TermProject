@@ -1,0 +1,3 @@
+tot_time,avg_time,accuracy,rmse,compiled,max_autotune,reduce_overhead
+0.3907651901245117,0.019538259506225585,0.87727755,74.32994,True,False,False
+0.43342065811157227,0.021671032905578612,0.87727755,74.32994,True,False,True
