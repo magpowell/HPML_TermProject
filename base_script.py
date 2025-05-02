@@ -4,6 +4,7 @@ import h5py
 import torch
 import torchvision
 import torch.nn as nn
+import torch.quantization
 import matplotlib.pyplot as plt
 import wandb
 sys.path.insert(1, './FourCastNet/') # insert code repo into path
@@ -20,7 +21,8 @@ from proj_utils import load_model, inference, lat, latitude_weighting_factor, we
 from distributed_utils import inference_ensemble
 
 PLOT_INPUTS = False # to get a sample plot
-COMPILE = True # to use torch.compile()
+COMPILE = False # to use torch.compile()
+QUANTIZE = True # to use post-training quantization
 
 # DO THIS WITHIN YOUR SCRATCH AND SET PATH
 # wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
@@ -43,6 +45,8 @@ wandb.login()
 run = wandb.init(
     project="weather-forecast-inference",    # Specify your project
     config={                         # Track hyperparameters and metadata
+            "quantize": QUANTIZE,
+            "compile": COMPILE
     },
 )
 
@@ -87,6 +91,15 @@ model = model.to(device)
 if COMPILE:
     model = torch.compile(model, backend = 'inductor')
 
+if QUANTIZE:
+    model.qconfig = torch.quantization.get_default_config('x86') # recommended
+    torch.quantization.prepare(model, inplace=True)
+    # Calibrate model
+    _ = model(data[:10])
+    # Convert to quantized model
+    quantized_model = torch.quantization.convert(model, inplace=False)
+    quantized_model.eval()
+
 # move normalization tensors to gpu
 # load time means: represents climatology
 img_shape_x = 720
@@ -126,9 +139,14 @@ print("Shape of data = {}".format(data.shape))
 # run inference
 data = (data - means)/stds # standardize the data
 data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
-acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
-                                                            params = params, device = device, 
-                                                            img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+if QUANTIZE:
+    acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, quantized_model, prediction_length, idx=idx_vis,
+                                                                params = params, device = device,
+                                                                img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+else:
+    acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
+                                                                params = params, device = device, 
+                                                                img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
 
 ensemble_size = 2
 base_initial = data[0:1]  # shape: [1, channels, img_shape_x, img_shape_y]
@@ -142,4 +160,7 @@ ensemble_init += epsilon * torch.randn_like(ensemble_init)
 prediction_length = 20  # as before
 
 # Run the ensemble inference and measure the performance
-ensemble_predictions, inference_time = inference_ensemble(ensemble_init, model, prediction_length, device = device)
+if QUANTIZE:
+    ensemble_predictions, inference_time = inference_ensemble(ensemble_init, quantized_model, prediction_length, device = device)
+else:
+    ensemble_predictions, inference_time = inference_ensemble(ensemble_init, model, prediction_length, device = device)
