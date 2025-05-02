@@ -19,6 +19,7 @@ from networks.afnonet import AFNONet
 from constants import VARIABLES
 from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
 from distributed_utils import inference_ensemble
+from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer
 
 PLOT_INPUTS = False # to get a sample plot
 COMPILE = False # to use torch.compile()
@@ -40,6 +41,7 @@ global_stds_path = f"{base_path}ccai_demo/additional/stats_v0/global_stds.npy"
 time_means_path = f"{base_path}ccai_demo/additional/stats_v0/time_means.npy"
 land_sea_mask_path = f"{base_path}ccai_demo/additional/stats_v0/land_sea_mask.npy"
 
+'''
 os.environ["WANDB_NOTEBOOK_NAME"] = './base_script.py' # this will be the name of the notebook in the wandb project database
 wandb.login()
 run = wandb.init(
@@ -49,6 +51,7 @@ run = wandb.init(
             "compile": COMPILE
     },
 )
+'''
 
 # default
 config_file = "./FourCastNet/config/AFNO.yaml"
@@ -87,18 +90,14 @@ else:
     raise Exception("not implemented")
 # load saved model weights
 model = load_model(model, params, model_path)
+
+# Print out layers of model
+for name, layer in model.named_modules():
+    print(f"{name}: {layer}")
+
 model = model.to(device)
 if COMPILE:
     model = torch.compile(model, backend = 'inductor')
-
-if QUANTIZE:
-    model.qconfig = torch.quantization.get_default_config('x86') # recommended
-    torch.quantization.prepare(model, inplace=True)
-    # Calibrate model
-    _ = model(data[:10])
-    # Convert to quantized model
-    quantized_model = torch.quantization.convert(model, inplace=False)
-    quantized_model.eval()
 
 # move normalization tensors to gpu
 # load time means: represents climatology
@@ -139,14 +138,13 @@ print("Shape of data = {}".format(data.shape))
 # run inference
 data = (data - means)/stds # standardize the data
 data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
+
 if QUANTIZE:
-    acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, quantized_model, prediction_length, idx=idx_vis,
-                                                                params = params, device = device,
-                                                                img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
-else:
-    acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
-                                                                params = params, device = device, 
-                                                                img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, [])
+    
+acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
+                                                            params = params, device = device, 
+                                                            img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
 
 ensemble_size = 2
 base_initial = data[0:1]  # shape: [1, channels, img_shape_x, img_shape_y]
@@ -160,7 +158,4 @@ ensemble_init += epsilon * torch.randn_like(ensemble_init)
 prediction_length = 20  # as before
 
 # Run the ensemble inference and measure the performance
-if QUANTIZE:
-    ensemble_predictions, inference_time = inference_ensemble(ensemble_init, quantized_model, prediction_length, device = device)
-else:
-    ensemble_predictions, inference_time = inference_ensemble(ensemble_init, model, prediction_length, device = device)
+ensemble_predictions, inference_time = inference_ensemble(ensemble_init, model, prediction_length, device = device)
