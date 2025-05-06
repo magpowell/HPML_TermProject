@@ -19,11 +19,12 @@ from networks.afnonet import AFNONet
 from constants import VARIABLES
 from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
 from distributed_utils import inference_ensemble
-from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer
+from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer, model_size
 
 PLOT_INPUTS = False # to get a sample plot
 COMPILE = False # to use torch.compile()
 QUANTIZE = True # to use post-training quantization
+QDTYPE = torch.int8
 
 # DO THIS WITHIN YOUR SCRATCH AND SET PATH
 # wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
@@ -47,7 +48,8 @@ run = wandb.init(
     project="weather-forecast-inference",    # Specify your project
     config={                         # Track hyperparameters and metadata
             "quantize": QUANTIZE,
-            "compile": COMPILE
+            "compile": COMPILE, 
+            "qdtype": QDTYPE
     },
 )
 
@@ -133,11 +135,19 @@ data = (data - means)/stds # standardize the data
 data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
 
 if QUANTIZE:
-    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, [])
-    
-acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
-                                                            params = params, device = device, 
-                                                            img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+    param_size, buffer_size = model_size(model)
+    init_size = param_size + buffer_size
+    print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    print(QDTYPE)
+    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, QDTYPE)
+    param_size, buffer_size = model_size(model)
+    final_size = param_size + buffer_size
+    print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    wandb.log({"model_size_reduction":final_size/init_size}) 
+
+total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
+                                                                                  params = params, device = device, 
+                                                                                  img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
 
 ensemble_size = 2
 base_initial = data[0:1]  # shape: [1, channels, img_shape_x, img_shape_y]
