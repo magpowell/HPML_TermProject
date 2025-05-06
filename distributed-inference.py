@@ -73,24 +73,23 @@ def inference(data_slice, model, prediction_length, idx, params, device, img_sha
                 if accelerator.is_main_process: # Only write to wandb if we're in the main process
                     print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
                     wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
-
+                
                 pred = future_pred
                 tar = future
                 total_time += iter_time
 
-    	    
-            if accelerator.is_main_process: # Only write to wandb if we're in the main process
-        	    print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
-                wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
-
-    	    # copy to cpu for plotting and visualization
-            results.append({
-                "acc": acc_cpu,
-                "rmse": rmse_cpu,
-                "predictions": predictions_cpu,
-                "targets": targets_cpu,
-                "ensemble_idx": int(ens),
-            })
+        if accelerator.is_main_process: # Only write to wandb if we're in the main process
+            print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
+            wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
+        
+        # copy to cpu for plotting and visualization
+        results.append({
+            "acc": acc_cpu,
+            "rmse": rmse_cpu,
+            "predictions": predictions_cpu,
+            "targets": targets_cpu,
+            "ensemble_idx": int(ens),
+        })
 
         #Gather results across processes
         all_results = gather_object(results)
