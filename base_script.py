@@ -129,17 +129,3 @@ data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inf
 acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
                                                             params = params, device = device, 
                                                             img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
-
-ensemble_size = 2
-base_initial = data[0:1]  # shape: [1, channels, img_shape_x, img_shape_y]
-
-# replicate to create an ensemble and add a small perturbation (e.g., 1e-3 scaling factor)
-ensemble_init = base_initial.repeat(ensemble_size, 1, 1, 1)
-epsilon = 1e-3  # perturbation magnitude
-ensemble_init += epsilon * torch.randn_like(ensemble_init)
-
-# Set the prediction length (number of autoregressive steps)
-prediction_length = 20  # as before
-
-# Run the ensemble inference and measure the performance
-ensemble_predictions, inference_time = inference_ensemble(ensemble_init, model, prediction_length, device = device)
