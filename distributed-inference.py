@@ -8,6 +8,7 @@ import time
 import os
 import fire
 import sys
+import numpy as np
 
 # A modified version of the inference script from project_utils.py
 # Adapted for distributed learning across GPUs
@@ -16,14 +17,15 @@ import sys
 # Specify ensemble_size with --num_processes flag passed through terminal
 
 ensemble_size = int(sys.argv[-1])
-# Distribute ensemble indices
-ensemble_indices = np.array_split(np.arange(ensemble_size), accelerator.num_processes)[accelerator.process_index]
 
 def inference(data_slice, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field):
     # Loop over ensemble idx and send to different GPUs
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
+    # Distribute ensemble indices
+    ensemble_indices = np.array_split(np.arange(ensemble_size), accelerator.num_processes)[accelerator.process_index]
+
 
     for ens in np.arange(ensemble_size):
 
