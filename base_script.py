@@ -41,7 +41,6 @@ global_stds_path = f"{base_path}ccai_demo/additional/stats_v0/global_stds.npy"
 time_means_path = f"{base_path}ccai_demo/additional/stats_v0/time_means.npy"
 land_sea_mask_path = f"{base_path}ccai_demo/additional/stats_v0/land_sea_mask.npy"
 
-'''
 os.environ["WANDB_NOTEBOOK_NAME"] = './base_script.py' # this will be the name of the notebook in the wandb project database
 wandb.login()
 run = wandb.init(
@@ -51,7 +50,6 @@ run = wandb.init(
             "compile": COMPILE
     },
 )
-'''
 
 # default
 config_file = "./FourCastNet/config/AFNO.yaml"
@@ -90,11 +88,6 @@ else:
     raise Exception("not implemented")
 # load saved model weights
 model = load_model(model, params, model_path)
-
-# Print out layers of model
-for name, layer in model.named_modules():
-    print(f"{name}: {layer}")
-
 model = model.to(device)
 if COMPILE:
     model = torch.compile(model, backend = 'inductor')

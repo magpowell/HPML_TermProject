@@ -19,7 +19,6 @@ class W8A16LinearLayer(nn.Module):
 
         if bias:
             self.register_buffer("bias", torch.randn((1, out_features), dtype=dtype))
-        else:
 
     def quantize(self, weights):
         w_fp32 = weights.clone().to(torch.float32)
