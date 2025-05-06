@@ -91,6 +91,18 @@ else:
 # load saved model weights
 model = load_model(model, params, model_path)
 model = model.to(device)
+
+if QUANTIZE:
+    param_size, buffer_size = model_size(model)
+    init_size = param_size + buffer_size
+    print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    print(QDTYPE)
+    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, QDTYPE)
+    param_size, buffer_size = model_size(model)
+    final_size = param_size + buffer_size
+    print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    wandb.log({"model_size_reduction":final_size/init_size}) 
+
 if COMPILE:
     model = torch.compile(model, backend = 'inductor')
 
@@ -133,17 +145,6 @@ print("Shape of data = {}".format(data.shape))
 # run inference
 data = (data - means)/stds # standardize the data
 data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
-
-if QUANTIZE:
-    param_size, buffer_size = model_size(model)
-    init_size = param_size + buffer_size
-    print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
-    print(QDTYPE)
-    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, QDTYPE)
-    param_size, buffer_size = model_size(model)
-    final_size = param_size + buffer_size
-    print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
-    wandb.log({"model_size_reduction":final_size/init_size}) 
 
 total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
                                                                                   params = params, device = device, 
