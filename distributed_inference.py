@@ -3,6 +3,7 @@ from accelerate import Accelerator
 from accelerate.utils import gather_object
 from tqdm import tqdm
 from datasets import load_dataset
+import wandb
 import torch
 import time
 import os
@@ -10,9 +11,29 @@ import fire
 import sys
 import numpy as np
 
+from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
+
 # A modified version of the inference script from project_utils.py
 # Adapted for distributed learning across GPUs
 
+def weighted_rmse_channels(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    #takes in arrays of size [n, c, h, w]  and returns latitude-weighted rmse for each channel
+    num_lat = pred.shape[2]
+    lat_t = torch.arange(start=0, end=num_lat, device=pred.device)
+    s = torch.sum(torch.cos(3.1416/180. * lat(lat_t, num_lat)))
+    weight = torch.reshape(latitude_weighting_factor(lat_t, num_lat, s), (1, 1, -1, 1))
+    result = torch.sqrt(torch.mean(weight * (pred - target)**2., dim=(-1,-2)))
+    return result
+
+def weighted_acc_channels(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    #takes in arrays of size [n, c, h, w]  and returns latitude-weighted acc for each channel
+    num_lat = pred.shape[2]
+    lat_t = torch.arange(start=0, end=num_lat, device=pred.device)
+    s = torch.sum(torch.cos(3.1416/180. * lat(lat_t, num_lat)))
+    weight = torch.reshape(latitude_weighting_factor(lat_t, num_lat, s), (1, 1, -1, 1))
+    result = torch.sum(weight * pred * target, dim=(-1,-2)) / torch.sqrt(torch.sum(weight * pred * pred, dim=(-1,-2)) * torch.sum(weight * target *
+    target, dim=(-1,-2)))
+    return result
 
 
 def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field):
@@ -20,6 +41,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Specify ensemble_size with --num_processes flag passed through terminal
 
     ensemble_size = int(sys.argv[-1])
+    prediction_length = int(sys.argv[1])
 
     # Use Accelerator() for distribution
     accelerator = Accelerator()
@@ -37,7 +59,9 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     for ens in range(start_idx, end_idx):
         
         data_slice = ensemble_init[ens] 
-       
+        print('Data slice shape:')
+        print(data_slice.shape)
+        
         # torch.compile warmup
         with torch.no_grad():
             dummy_input = torch.randn(1, data_slice.shape[1], img_shape_x, img_shape_y).to(device)
@@ -95,16 +119,16 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         
         # copy to cpu for plotting and visualization
         ens_idx_results.append({
-            "acc": acc_cpu,
-            "rmse": rmse_cpu,
-            "predictions": predictions_cpu,
-            "targets": targets_cpu,
-            "ensemble_idx": int(ens),
+            "acc": acc.cpu().numpy,
+            "rmse": rmse.cpu().numpy,
+            "total_inference_time": total_time,
+            "avg_time": total_time/prediction_length,
+            "ensemble_idx": ens,
         })
 
         #Gather results across processes
-        all_results = gather_object(results)
+        all_results = gather_object(ens_idx_results)
         if accelerator.is_main_process: # Only return gathered results if we're in the main process
-            return gathered
+            return all_results
         else:
             return None
