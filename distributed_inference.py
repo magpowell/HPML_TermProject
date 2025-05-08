@@ -11,7 +11,7 @@ import fire
 import sys
 import numpy as np
 
-from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
+from proj_utils import load_model, inference, lat, latitude_weighting_factor
 
 # A modified version of the inference script from project_utils.py
 # Adapted for distributed learning across GPUs
@@ -76,7 +76,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         targets = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
         predictions = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
 
-        total_time = 0
+        total_time_elapsed = 0
         with torch.no_grad():
             for i in range(data_slice.shape[0]):
                 iter_start = time.perf_counter()
@@ -111,18 +111,18 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
                 
                 pred = future_pred
                 tar = future
-                total_time += iter_time
+                total_time_elapsed += iter_time
 
         if accelerator.is_main_process: # Only write to wandb if we're in the main process
-            print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
-            wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
+            print(f'Total inference time for all ensembles: {total_time_elapsed:.2f}s, Average time per step: {total_time_elapsed/prediction_length:.2f}s')
+            wandb.log({"total_inference_time": total_time_elapsed, "avg_step_time": total_time_elapsed/ensemble_size})
         
         # copy to cpu for plotting and visualization
         ens_idx_results.append({
             "acc": acc.cpu().numpy,
             "rmse": rmse.cpu().numpy,
-            "total_inference_time": total_time,
-            "avg_time": total_time/prediction_length,
+            "total_inference_time": total_time_elapsed,
+            "avg_time": total_time_elapsed/ensemble_size,
             "ensemble_idx": ens,
         })
 

@@ -223,7 +223,7 @@ if not distributed:
 if distributed:
     if torch.distributed.get_rank() == 0:
         print("Running with Num GPUs = {}".format(num_gpus))
-    from distributed_inference_fix import inference_ensemble
+    from distributed_inference import inference_ensemble
 
     hold = data[np.newaxis, :, :, :]
     ensemble_init = np.tile(hold, (ensemble_size, 1, 1, 1, 1))
