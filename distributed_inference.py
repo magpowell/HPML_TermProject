@@ -105,30 +105,25 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
                 iter_end = time.perf_counter()
                 iter_time = iter_end - iter_start
                 
-                if accelerator.is_main_process: # Only write to wandb if we're in the main process
-                    print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
-                    wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
-                
                 pred = future_pred
                 tar = future
                 total_time_elapsed += iter_time
 
-        if accelerator.is_main_process: # Only write to wandb if we're in the main process
-            print(f'Total inference time for all ensembles: {total_time_elapsed:.2f}s, Average time per step: {total_time_elapsed/prediction_length:.2f}s')
-            wandb.log({"total_inference_time": total_time_elapsed, "avg_step_time": total_time_elapsed/ensemble_size})
         
         # copy to cpu for plotting and visualization
         ens_idx_results.append({
-            "acc": acc.cpu().numpy,
-            "rmse": rmse.cpu().numpy,
             "total_inference_time": total_time_elapsed,
-            "avg_time": total_time_elapsed/ensemble_size,
             "ensemble_idx": ens,
         })
 
-        #Gather results across processes
-        all_results = gather_object(ens_idx_results)
-        if accelerator.is_main_process: # Only return gathered results if we're in the main process
-            return all_results
-        else:
-            return None
+    #Gather results across processes
+    all_results = gather_object(ens_idx_results)
+
+    if accelerator.is_main_process:
+        total_time = sum(res["total_inference_time"] for res in all_results)
+        avg_time = total_time_elapsed / ensemble_size
+
+        print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.2f} seconds")
+        print(f"Average time per ensemble: {avg_time:.2f} seconds")
+
+    return all_results if accelerator.is_main_process else None
