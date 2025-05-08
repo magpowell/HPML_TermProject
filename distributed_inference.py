@@ -42,7 +42,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
-
+    print(f"[Rank {accelerator.process_index}] using {accelerator.device}")
+    print(f"Number of GPUs: {accelerator.num_processes}")
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
@@ -55,9 +56,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         
         data_slice = ensemble_init[ens] 
         data_slice = torch.tensor(data_slice, device=device, dtype=torch.float)
-        if torch.distributed.get_rank() == 0:
-            print('Data slice shape:')
-            print(data_slice.shape)
+        print('Data slice shape:')
+        print(data_slice.shape)
         
         # torch.compile warmup
         with torch.no_grad():
@@ -74,6 +74,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         predictions = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
 
         total_time_elapsed = 0
+        total_time_ensemble=0
         with torch.no_grad():
             for i in range(data_slice.shape[0]):
                 iter_start = time.perf_counter()
@@ -104,23 +105,24 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
                 
                 pred = future_pred
                 tar = future
-                total_time_elapsed += iter_time
+                total_time_ensemble += iter_time
 
         
         # copy to cpu for plotting and visualization
         ens_idx_results.append({
-            "total_inference_time": total_time_elapsed,
+            "total_inference_time_for_ensemble": total_time_ensemble,
             "ensemble_idx": ens,
         })
+        total_time_elapsed += total_time_ensemble
 
     #Gather results across processes
     all_results = gather_object(ens_idx_results)
 
     if accelerator.is_main_process:
-        total_time = sum(res["total_inference_time"] for res in all_results)
+        #total_time = sum(res["total_inference_time"] for res in all_results)
         avg_time = total_time_elapsed / ensemble_size
 
-        print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.2f} seconds")
-        print(f"Average time per ensemble member: {avg_time:.2f} seconds")
+        print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.4f} seconds")
+        print(f"Average time per ensemble member: {avg_time:.4f} seconds")
 
     return all_results if accelerator.is_main_process else None
