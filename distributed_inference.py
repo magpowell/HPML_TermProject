@@ -42,7 +42,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
-    print(f"[Rank {accelerator.process_index}] using {accelerator.device}")
+#    print(f"[Rank {accelerator.process_index}] using {accelerator.device}")
     print(f"Number of GPUs: {accelerator.num_processes}")
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
