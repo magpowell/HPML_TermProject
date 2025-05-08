@@ -75,7 +75,7 @@ field = sys.argv[-1]
 # tar -xvf ccai_demo.tar
 # rm ccai_demo.tar
 
-base_path = "/pscratch/sd/a/ac5114/ML_class/" # update to yours
+base_path = "/pscratch/sd/m/mpowell/hpml/" # update to yours
 
 # data and model paths
 data_path = f"{base_path}ccai_demo/data/FCN_ERA5_data_v0/out_of_sample"
@@ -204,12 +204,12 @@ if num_gpus > 1:
     from distributed_inference import inference_ensemble
 
     data = data[np.newaxis, :, :, :]
+    ensemble_init = np.tile(data, (num_gpus, 1, 1, 1, 1))
+    epsilon = 1e-3 
 
-    ensemble_init = data.repeat(num_gpus,axis=0)
-    ensemble_init = torch.tensor(ensemble_init, device=device, dtype=torch.float)
-
-    epsilon = 1e-3  # perturbation magnitude
-    ensemble_init += epsilon * torch.randn_like(ensemble_init.clone().detach())
+    random_values = np.random.randn(num_gpus)
+    random_values = random_values[:, np.newaxis, np.newaxis, np.newaxis]
+    ensemble_init *= (random_values * epsilon)
 
     # Run the ensemble inference and measure the performance
     inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field, num_gpus = num_gpus)

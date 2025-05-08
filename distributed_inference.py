@@ -36,7 +36,7 @@ def weighted_acc_channels(pred: torch.Tensor, target: torch.Tensor) -> torch.Ten
     return result
 
 
-def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field, num_gpus):
+def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field, ensemble_size):
     # Loop over ensemble idx and send to different GPUs
 
     # Use Accelerator() for distribution
@@ -46,15 +46,15 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
-    local_ensemble_size = (num_gpus + accelerator.num_processes - 1) // accelerator.num_processes
+    local_ensemble_size = (ensemble_size + accelerator.num_processes - 1) // accelerator.num_processes
     start_idx = accelerator.process_index * local_ensemble_size
-    end_idx = min(start_idx + local_ensemble_size, num_gpus)
-
+    end_idx = min(start_idx + local_ensemble_size, ensemble_size)
 
     ens_idx_results = []
     for ens in range(start_idx, end_idx):
         
         data_slice = ensemble_init[ens] 
+        data_slice = torch.tensor(data_slice, device=device, dtype=torch.float)
         print('Data slice shape:')
         print(data_slice.shape)
         
