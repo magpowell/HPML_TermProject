@@ -4,10 +4,17 @@ import h5py
 import torch
 import torchvision
 import torch.nn as nn
-import torch.quantization
 import matplotlib.pyplot as plt
 import wandb
 sys.path.insert(1, './FourCastNet/') # insert code repo into path
+
+"""
+Run this script like:
+python dist_inf_base.py --prediction_length --num_gpus
+
+where prediction length is the number of autoregressive steps conducted by the distributed inference.
+
+"""
 
 # you may need to
 # !pip install ruamel.yaml einops timm
@@ -18,12 +25,11 @@ from networks.afnonet import AFNONet
 
 from constants import VARIABLES
 from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
-from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer, model_size
+#from distributed_utils import inference_ensemble
+from distributed_inference import inference_ensemble
 
 PLOT_INPUTS = False # to get a sample plot
 COMPILE = False # to use torch.compile()
-QUANTIZE = True # to use post-training quantization
-QDTYPE = torch.int8
 
 # DO THIS WITHIN YOUR SCRATCH AND SET PATH
 # wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
@@ -44,11 +50,8 @@ land_sea_mask_path = f"{base_path}ccai_demo/additional/stats_v0/land_sea_mask.np
 os.environ["WANDB_NOTEBOOK_NAME"] = './base_script.py' # this will be the name of the notebook in the wandb project database
 wandb.login()
 run = wandb.init(
-    project="weather-forecast-inference",    # Specify your project
+    project="weather-forecast-inference",entity="jhalpern-columbia-university",    # Specify your project
     config={                         # Track hyperparameters and metadata
-            "quantize": QUANTIZE,
-            "compile": COMPILE, 
-            "qdtype": QDTYPE
     },
 )
 
@@ -90,18 +93,6 @@ else:
 # load saved model weights
 model = load_model(model, params, model_path)
 model = model.to(device)
-
-if QUANTIZE:
-    param_size, buffer_size = model_size(model)
-    init_size = param_size + buffer_size
-    print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
-    print(QDTYPE)
-    replace_linear_with_target_and_quantize(model, W8A16LinearLayer, QDTYPE)
-    param_size, buffer_size = model_size(model)
-    final_size = param_size + buffer_size
-    print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
-    wandb.log({"model_size_reduction":final_size/init_size}) 
-
 if COMPILE:
     model = torch.compile(model, backend = 'inductor')
 
@@ -141,11 +132,20 @@ data = h5py.File(data_file, 'r')['fields'][ic:(ic+prediction_length*dt):dt,in_ch
 print(data.shape)
 print("Shape of data = {}".format(data.shape))
 
-# run inference
 data = (data - means)/stds # standardize the data
-data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
+    
+data = data[np.newaxis, :, :, :]
 
-total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
-                                                                                  params = params, device = device, 
-                                                                                  img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+ensemble_size = sys.argv[-1]
 
+ensemble_init = data.repeat(ensemble_size,axis=0)
+ensemble_init = torch.tensor(ensemble_init, device=device, dtype=torch.float)
+
+epsilon = 1e-3  # perturbation magnitude
+ensemble_init += epsilon * torch.randn_like(ensemble_init.clone().detach())
+
+# Set the prediction length (number of autoregressive steps)
+prediction_length = sys.argv[1]
+
+# Run the ensemble inference and measure the performance
+inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)

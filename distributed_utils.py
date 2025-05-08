@@ -1,6 +1,10 @@
 import torch
 import time
 
+# import modules for distributed inference utilities across GPUs
+from accelerate import PartialState
+from diffusers import DiffusionPipeline
+
 def inference_ensemble(initial_condition, model, prediction_length, device):
 
     ensemble_size = initial_condition.shape[0]
@@ -12,6 +16,9 @@ def inference_ensemble(initial_condition, model, prediction_length, device):
     start_time = time.time()
     
     # autoregressive loop
+    # adapted for multi-GPU support
+    # Loop over batches to get initial conditions
+    # use distributed_state.split_between_processes()
     with torch.no_grad():
         current = initial_condition
         for step in range(1, prediction_length):
