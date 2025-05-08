@@ -9,6 +9,44 @@ import matplotlib.pyplot as plt
 import wandb
 sys.path.insert(1, './FourCastNet/') # insert code repo into path
 
+"""
+*******************************
+Usage:
+Run this script by passing arguments to the command line as follows:
+
+python base_script.py --torch.compile --quantization --num-gpus --prediction-length --variable
+
+
+--torch.compile: Boolean, choose if running in compile mode for speedup
+--quantization: Boolean, choose if you'd like to run with quantized linear layer weights
+--num-gpus: Int, number of GPUs to use for distributed inference
+--prediction-length: Int, number of timesteps for autoregressive loop
+--variable: String, variable name you'd like to calculate. Options are:
+    variables = ['u10' (10 metre zonal wind speed m s-1),
+             'v10' (10 metre meridional wind speed m s-1),
+             't2m' (2 metre temperature K),
+             'sp' (Surface pressure Pa),
+             'msl' (Mean sea level pressure Pa),
+             't850' (temperature at the 850 hPa pressure level K),
+             'u1000' (zonal wind at 1000 mbar pressure surface m s-1),
+             'v1000' (meridional wind at 1000 mbar pressure surface m s-1),
+             'z1000' (vertical wind at 1000 mbar pressure surface m s-1),
+             'u850' (zonal wind at 850 mbar pressure surface m s-1),
+             'v850' (meridional wind at 850 mbar pressure surface m s-1),
+             'z850' (vertical wind at 850 mbar pressure surface m s-1),
+             'u500' (zonal wind at 500 mbar pressure surface m s-1),
+             'v500' (meridional wind at 500 mbar pressure surface m s-1),
+             'z500' (vertical wind at 500 mbar pressure surface m s-1),
+             't500' (temperature wind at 500 mbar pressure surface K),
+             'z50'  (geopotential height at 50 hPa),
+             'r500' (relative humidity at 500 mbar pressure surface),
+             'r850' (relative humidity at 850 mbar pressure surface),
+             'tcwv' (total column water vapor kg m-2)]
+
+*******************************
+"""
+
+
 # you may need to
 # !pip install ruamel.yaml einops timm
 # (or conda install)
@@ -21,9 +59,16 @@ from proj_utils import load_model, inference, lat, latitude_weighting_factor, we
 from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer, model_size
 
 PLOT_INPUTS = False # to get a sample plot
-COMPILE = False # to use torch.compile()
-QUANTIZE = True # to use post-training quantization
+COMPILE = bool(sys.argv[1]) # to use torch.compile()
+QUANTIZE = bool(sys.argv[2]) # to use post-training quantization
 QDTYPE = torch.int8
+
+num_gpus = int(sys.argv[3])
+
+prediction_length = int(sys.argv[4]) # number of steps (x 6 hours)
+
+# which field to track for visualization
+field = sys.argv[-1]
 
 # DO THIS WITHIN YOUR SCRATCH AND SET PATH
 # wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
@@ -48,7 +93,9 @@ run = wandb.init(
     config={                         # Track hyperparameters and metadata
             "quantize": QUANTIZE,
             "compile": COMPILE, 
-            "qdtype": QDTYPE
+            "qdtype": QDTYPE,
+            "gpus": num_gpus,
+            "variable": field
     },
 )
 
@@ -128,10 +175,7 @@ print("Shape of std = {}".format(std.shape))
 # setup data for inference
 dt = 1 # time step (x 6 hours)
 ic = 0 # start the inference from here
-prediction_length = 20 # number of steps (x 6 hours)
 
-# which field to track for visualization
-field = 'u10'
 idx_vis = VARIABLES.index(field) # also prints out metrics for this field
 
 # get prediction length slice from the data
@@ -141,11 +185,31 @@ data = h5py.File(data_file, 'r')['fields'][ic:(ic+prediction_length*dt):dt,in_ch
 print(data.shape)
 print("Shape of data = {}".format(data.shape))
 
+
+# Announce variable name:
+print('Running inference for variable '.format(field))
+
 # run inference
 data = (data - means)/stds # standardize the data
-data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
 
-total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
+if num_gpus == 1:
+    data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
+
+    total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
                                                                                   params = params, device = device, 
                                                                                   img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
 
+if num_gpus > 1:
+    print("Running with Num GPUs = {}".format(num_gpus))
+    from distributed_inference import inference_ensemble
+
+    data = data[np.newaxis, :, :, :]
+
+    ensemble_init = data.repeat(num_gpus,axis=0)
+    ensemble_init = torch.tensor(ensemble_init, device=device, dtype=torch.float)
+
+    epsilon = 1e-3  # perturbation magnitude
+    ensemble_init += epsilon * torch.randn_like(ensemble_init.clone().detach())
+
+    # Run the ensemble inference and measure the performance
+    inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field, num_gpus = num_gpus)
