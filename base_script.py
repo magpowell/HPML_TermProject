@@ -10,20 +10,12 @@ import wandb
 sys.path.insert(1, './FourCastNet/') # insert code repo into path
 
 
-import torch.distributed as dist
-
-def setup_distributed():
-    if not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
-
-setup_distributed()
-
 """
 *******************************
 Usage:
 Run this script by passing arguments to the command line as follows:
 
-python base_script.py --torch.compile --quantization --distributed --prediction-length --ensemble-size --num_gpus --variable
+python base_script.py --torch.compile --quantization --distributed --prediction-length --ensemble-size --variable
 
 
 --torch.compile: Boolean, choose if running in compile mode for speedup
@@ -31,7 +23,6 @@ python base_script.py --torch.compile --quantization --distributed --prediction-
 --distributed: Boolean flag for distributed inference
 --prediction-length: Int, number of timesteps for autoregressive loop
 --ensemble-size: Size of ensemble you want to use
---num_gpus: number of GPUs you're using
 --variable: String, variable name you'd like to calculate. Options are:
     variables = ['u10' (10 metre zonal wind speed m s-1),
              'v10' (10 metre meridional wind speed m s-1),
@@ -69,18 +60,21 @@ from constants import VARIABLES
 from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
 from quantize import replace_linear_with_target_and_quantize, W8A16LinearLayer, model_size
 
+
+def str2bool(v):
+    return v.lower() in ('true', '1', 'yes', 'y', 't')
+
 PLOT_INPUTS = False # to get a sample plot
-COMPILE = bool(sys.argv[1]) # to use torch.compile()
-QUANTIZE = bool(sys.argv[2]) # to use post-training quantization
+COMPILE = str2bool(sys.argv[1]) # to use torch.compile()
+QUANTIZE = str2bool(sys.argv[2]) # to use post-training quantization
 QDTYPE = torch.int8
 
-distributed = bool(sys.argv[3])
-
+distributed = str2bool(sys.argv[3])
+print('distributed:',distributed)
 prediction_length = int(sys.argv[4]) # number of steps (x 6 hours)
 
 ensemble_size = int(sys.argv[5])
 
-num_gpus = int(sys.argv[6])
 # which field to track for visualization
 field = sys.argv[-1]
 
@@ -103,7 +97,7 @@ land_sea_mask_path = f"{base_path}ccai_demo/additional/stats_v0/land_sea_mask.np
 os.environ["WANDB_NOTEBOOK_NAME"] = './base_script.py' # this will be the name of the notebook in the wandb project database
 wandb.login()
 run = wandb.init(
-    project="weather-forecast-inference",    # Specify your project
+    project="weather-forecast-inference", entity="jhalpern-columbia-university",   # Specify your project
     config={                         # Track hyperparameters and metadata
             "quantize": QUANTIZE,
             "compile": COMPILE, 
@@ -117,13 +111,11 @@ run = wandb.init(
 config_file = "./FourCastNet/config/AFNO.yaml"
 config_name = "afno_backbone"
 params = YParams(config_file, config_name)
-if torch.distributed.get_rank() == 0:
-    print("Model architecture used = {}".format(params["nettype"]))
+print("Model architecture used = {}".format(params["nettype"]))
 
 if PLOT_INPUTS:
     sample_data = h5py.File(data_file, 'r')['fields']
-    if torch.distributed.get_rank() == 0:
-        print('Total data shape:', sample_data.shape)
+    print('Total data shape:', sample_data.shape)
     timestep_idx = 0
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(15, 10))
     for i, varname in enumerate(['u10', 't2m', 'z500', 'tcwv']):
@@ -157,14 +149,12 @@ model = model.to(device)
 if QUANTIZE:
     param_size, buffer_size = model_size(model)
     init_size = param_size + buffer_size
-    if torch.distributed.get_rank() == 0:
-        print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
-        print(QDTYPE)
+    print(f"Initial model size: {(init_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    print(QDTYPE)
     replace_linear_with_target_and_quantize(model, W8A16LinearLayer, QDTYPE)
     param_size, buffer_size = model_size(model)
     final_size = param_size + buffer_size
-    if torch.distributed.get_rank() == 0:
-        print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
+    print(f"Final model size: {(final_size) / (1024 ** 2):.2f} MB, {param_size / (1024 ** 2):.2f} MB (parameters), {buffer_size /(1024 ** 2):.2f} MB (buffers)")
     wandb.log({"model_size_reduction":final_size/init_size}) 
 
 if COMPILE:
@@ -187,9 +177,8 @@ m = torch.unsqueeze(m, 0)
 m = m.to(device, dtype=torch.float)
 std = torch.as_tensor(stds[:,0,0]).to(device, dtype=torch.float)
 
-if torch.distributed.get_rank() == 0:
-    print("Shape of time means = {}".format(m.shape))
-    print("Shape of std = {}".format(std.shape))
+print("Shape of time means = {}".format(m.shape))
+print("Shape of std = {}".format(std.shape))
 
 # setup data for inference
 dt = 1 # time step (x 6 hours)
@@ -198,32 +187,33 @@ ic = 0 # start the inference from here
 idx_vis = VARIABLES.index(field) # also prints out metrics for this field
 
 # get prediction length slice from the data
-if torch.distributed.get_rank() == 0:
-    print('Loading inference data')
-    print('Inference data from {}'.format(data_file))
+print('Loading inference data')
+print('Inference data from {}'.format(data_file))
 data = h5py.File(data_file, 'r')['fields'][ic:(ic+prediction_length*dt):dt,in_channels,0:img_shape_x]
-if torch.distributed.get_rank() == 0:
-    print(data.shape)
-    print("Shape of data = {}".format(data.shape))
+print(data.shape)
+print("Shape of data = {}".format(data.shape))
 
 
-    # Announce variable name:
-    print('Running inference for variable '.format(field))
+# Announce variable name:
+print('Running inference for variable {}'.format(field))
 
 # run inference
 data = (data - means)/stds # standardize the data
 
+print('distributed:',distributed)
+
 if not distributed:
     data = torch.as_tensor(data).to(device, dtype=torch.float) # move to gpu for inference
-
+    total_inference_time_start = time.perf_counter()
     total_time, avg_time, acc_cpu, rmse_cpu, predictions_cpu, targets_cpu = inference(data, model, prediction_length, idx=idx_vis,
                                                                                   params = params, device = device, 
                                                                                   img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field)
+    total_inference_time = time.perf_counter() - total_inference_time_start
+    print(f'Total Inference time: {total_inference_time}')
+    print(f'Average time per ensemble member:', total_inference_time/ensemble_size)
 
 if distributed:
-    if torch.distributed.get_rank() == 0:
-        print("Running with Num GPUs = {}".format(num_gpus))
-    from distributed_inference_fix import inference_ensemble
+    from distributed_inference import inference_ensemble
 
     hold = data[np.newaxis, :, :, :]
     ensemble_init = np.tile(hold, (ensemble_size, 1, 1, 1, 1))
@@ -236,6 +226,3 @@ if distributed:
 
     # Run the ensemble inference and measure the performance
     inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field, ensemble_size = ensemble_size)
-    if torch.distributed.get_rank() == 0:
-        print("Inference_results:")
-        print(inference_results)

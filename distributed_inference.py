@@ -11,7 +11,7 @@ import fire
 import sys
 import numpy as np
 
-from proj_utils import load_model, inference, lat, latitude_weighting_factor, weighted_rmse_channels
+from proj_utils import load_model, inference, lat, latitude_weighting_factor
 
 # A modified version of the inference script from project_utils.py
 # Adapted for distributed learning across GPUs
@@ -42,10 +42,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
-
-    if accelerator.is_main_process:
-        print("Hello from the main process")
-
+#    print(f"[Rank {accelerator.process_index}] using {accelerator.device}")
+    print(f"Number of GPUs: {accelerator.num_processes}")
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
@@ -58,9 +56,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         
         data_slice = ensemble_init[ens] 
         data_slice = torch.tensor(data_slice, device=device, dtype=torch.float)
-        if torch.distributed.get_rank() == 0:
-            print('Data slice shape:')
-            print(data_slice.shape)
+        print('Data slice shape:')
+        print(data_slice.shape)
         
         # torch.compile warmup
         with torch.no_grad():
@@ -76,7 +73,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         targets = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
         predictions = torch.zeros((prediction_length, 1, img_shape_x, img_shape_y)).to(device, dtype=torch.float)
 
-        total_time = 0
+        total_time_elapsed = 0
+        total_time_ensemble=0
         with torch.no_grad():
             for i in range(data_slice.shape[0]):
                 iter_start = time.perf_counter()
@@ -105,30 +103,26 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
                 iter_end = time.perf_counter()
                 iter_time = iter_end - iter_start
                 
-                if accelerator.is_main_process: # Only write to wandb if we're in the main process
-                    print('Predicted timestep {} of {}. {} RMS Error: {}, ACC: {}'.format(i, prediction_length, field, rmse[i,idx], acc[i,idx]))
-                    wandb.log({"accuracy": acc[i,idx], "rmse": rmse[i,idx], "step_time": iter_time})
-                
                 pred = future_pred
                 tar = future
-                total_time += iter_time
+                total_time_ensemble += iter_time
 
-        if accelerator.is_main_process: # Only write to wandb if we're in the main process
-            print(f'Total inference time: {total_time:.2f}s, Average time per step: {total_time/prediction_length:.2f}s')
-            wandb.log({"total_inference_time": total_time, "avg_step_time": total_time/prediction_length})
         
         # copy to cpu for plotting and visualization
         ens_idx_results.append({
-            "acc": acc.cpu().numpy,
-            "rmse": rmse.cpu().numpy,
-            "total_inference_time": total_time,
-            "avg_time": total_time/prediction_length,
+            "total_inference_time_for_ensemble": total_time_ensemble,
             "ensemble_idx": ens,
         })
+        total_time_elapsed += total_time_ensemble
 
-        #Gather results across processes
-        all_results = gather_object(ens_idx_results)
-        if accelerator.is_main_process: # Only return gathered results if we're in the main process
-            return all_results
-        else:
-            return None
+    #Gather results across processes
+    all_results = gather_object(ens_idx_results)
+
+    if accelerator.is_main_process:
+        #total_time = sum(res["total_inference_time"] for res in all_results)
+        avg_time = total_time_elapsed / ensemble_size
+
+        print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.4f} seconds")
+        print(f"Average time per ensemble member: {avg_time:.4f} seconds")
+
+    return all_results if accelerator.is_main_process else None
