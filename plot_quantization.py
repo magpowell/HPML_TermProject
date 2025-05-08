@@ -23,7 +23,7 @@ axs[1].set_ylabel("Avg Inference Time (ms)", fontsize=18, fontweight='bold')
 axs[1].tick_params(axis='both', labelsize=14)
 
 # Plot 3: Model Size Reduction
-axs[2].bar(df['qdtype'], df['quantized_model_size'], color='seagreen')
+axs[2].bar(df['qdtype'], 100*df['quantized_model_size'], color='seagreen')
 axs[2].set_ylabel("Quantized Model Size (%)", fontsize=18, fontweight='bold')
 axs[2].set_xlabel("Quantization Data Type", fontsize=18, fontweight='bold')
 axs[2].tick_params(axis='both', labelsize=14)
