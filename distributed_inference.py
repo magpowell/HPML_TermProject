@@ -36,12 +36,8 @@ def weighted_acc_channels(pred: torch.Tensor, target: torch.Tensor) -> torch.Ten
     return result
 
 
-def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field):
+def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field, num_gpus):
     # Loop over ensemble idx and send to different GPUs
-    # Specify ensemble_size with --num_processes flag passed through terminal
-
-    ensemble_size = int(sys.argv[-1])
-    prediction_length = int(sys.argv[1])
 
     # Use Accelerator() for distribution
     accelerator = Accelerator()
@@ -50,9 +46,9 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
-    local_ensemble_size = (ensemble_size + accelerator.num_processes - 1) // accelerator.num_processes
+    local_ensemble_size = (num_gpus + accelerator.num_processes - 1) // accelerator.num_processes
     start_idx = accelerator.process_index * local_ensemble_size
-    end_idx = min(start_idx + local_ensemble_size, ensemble_size)
+    end_idx = min(start_idx + local_ensemble_size, num_gpus)
 
 
     ens_idx_results = []
