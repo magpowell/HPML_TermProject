@@ -43,9 +43,6 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     accelerator = Accelerator()
     device = accelerator.device
 
-    if accelerator.is_main_process:
-        print("Hello from the main process")
-
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
@@ -124,6 +121,6 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         avg_time = total_time_elapsed / ensemble_size
 
         print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.2f} seconds")
-        print(f"Average time per ensemble: {avg_time:.2f} seconds")
+        print(f"Average time per ensemble member: {avg_time:.2f} seconds")
 
     return all_results if accelerator.is_main_process else None

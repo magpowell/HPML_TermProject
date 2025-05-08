@@ -236,6 +236,3 @@ if distributed:
 
     # Run the ensemble inference and measure the performance
     inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field, ensemble_size = ensemble_size)
-    if torch.distributed.get_rank() == 0:
-        print("Inference_results:")
-        print(inference_results)
