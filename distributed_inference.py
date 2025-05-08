@@ -36,27 +36,31 @@ def weighted_acc_channels(pred: torch.Tensor, target: torch.Tensor) -> torch.Ten
     return result
 
 
-def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field, num_gpus):
+def inference_ensemble(ensemble_init, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field, ensemble_size):
     # Loop over ensemble idx and send to different GPUs
 
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
 
+    if accelerator.is_main_process:
+        print("Hello from the main process")
+
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
-    local_ensemble_size = (num_gpus + accelerator.num_processes - 1) // accelerator.num_processes
+    local_ensemble_size = (ensemble_size + accelerator.num_processes - 1) // accelerator.num_processes
     start_idx = accelerator.process_index * local_ensemble_size
-    end_idx = min(start_idx + local_ensemble_size, num_gpus)
-
+    end_idx = min(start_idx + local_ensemble_size, ensemble_size)
 
     ens_idx_results = []
     for ens in range(start_idx, end_idx):
         
         data_slice = ensemble_init[ens] 
-        print('Data slice shape:')
-        print(data_slice.shape)
+        data_slice = torch.tensor(data_slice, device=device, dtype=torch.float)
+        if torch.distributed.get_rank() == 0:
+            print('Data slice shape:')
+            print(data_slice.shape)
         
         # torch.compile warmup
         with torch.no_grad():
@@ -96,8 +100,8 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
                     targets[i+1,0] = future[0,idx]
 
                 # compute metrics using the ground truth ERA5 data as "true" predictions
-                rmse[i] = weighted_rmse_channels(pred, tar) * std
-                acc[i] = weighted_acc_channels(pred-m, tar-m)
+                rmse[i] = weighted_rmse_channels(pred, tar) * std.to(pred.device)
+                acc[i] = weighted_acc_channels(pred - m.to(pred.device), tar - m.to(pred.device))
                 iter_end = time.perf_counter()
                 iter_time = iter_end - iter_start
                 
