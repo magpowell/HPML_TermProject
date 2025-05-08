@@ -203,13 +203,14 @@ if num_gpus > 1:
     print("Running with Num GPUs = {}".format(num_gpus))
     from distributed_inference import inference_ensemble
 
-    data = data[np.newaxis, :, :, :]
-    ensemble_init = np.tile(data, (num_gpus, 1, 1, 1, 1))
-    epsilon = 1e-3 
+    hold = data[np.newaxis, :, :, :]
+    ensemble_init = np.tile(hold, (num_gpus, 1, 1, 1, 1))
 
-    random_values = np.random.randn(num_gpus)
-    random_values = random_values[:, np.newaxis, np.newaxis, np.newaxis]
-    ensemble_init *= (random_values * epsilon)
+    epsilon = 1e-8
+    random_values = np.random.uniform(0, 10, num_gpus)
+
+    for i in range(num_gpus):
+        ensemble_init[i, :, :, :] *= epsilon * random_values[i]
 
     # Run the ensemble inference and measure the performance
     inference_results = inference_ensemble(ensemble_init, model, prediction_length, idx_vis, params, device = device,img_shape_x = img_shape_x, img_shape_y = img_shape_y, std = std, m =m, field = field, num_gpus = num_gpus)
