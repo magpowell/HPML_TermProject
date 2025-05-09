@@ -45,7 +45,10 @@ Implementation of inference tests is in **base_script.py**. This script can be u
 Outputs for each run will be printed to stdout. This includes total runtime for inference as well as average inference time per ensemble member, accuracy, and root mean square errors. These can be visualized in WandB to evaluate performance across multiple tests. Outputs for quantization test can be found in **quantization_tests.csv** and are plotted in **quantization_results.png**. Torch.compile test results are saved in **torch_compile.csv** and plotted in **torch_compile_tests.ipynb**. Data for distributed inference on Perlmutter with NVIDIA A100 GPUs is saved in **distributed_inference.csv**. Torch.compile and quanitzation tests can be conducted using the corresponding .py files.
 
 ## Code structure:
-base script.py processes user inputs from the command line and implements the corresponding test. It does so by calling the inference functions defined in proj_utils.py (for one GPU) and distributed_inference.py (for multi-GPU). It loads the model and computes accuracies and root mean square errors for each timestep using calls to functions defined in proj_utils.py
+base script.py processes user inputs from the command line and implements the corresponding test. It does so by calling the inference functions defined in proj_utils.py (for one GPU) and distributed_inference.py (for multi-GPU). Quantization is implemented by packages from quantize.py. It loads the model and computes accuracies and root mean square errors for each timestep using calls to functions defined in proj_utils.py. A schematic of the code structure is shown below:
+
+
+![code-flow](https://github.com/user-attachments/assets/e352c08e-3422-4bed-b307-d5e73e36eda5)
 
 
 ## Additional Torch Compile Tests, Plots, and Baseline Run
