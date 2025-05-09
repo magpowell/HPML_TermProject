@@ -16,24 +16,33 @@ The objective of the final project is to optimize and distribute inference of NV
 
 ## Running the code:
 
-Implementation of inference tests is in base_script.py. This script can be used to do the inference using FourCastNet and the wrapper functions defined in this repository. This repo contains support for quantized weights to reduce model size, torch.compile to reduce inference times, and distributed inference to improve speedup. First, clone the github repo to your favorite computing environment with GPU support. To run this script, follow the steps below:
+Implementation of inference tests is in **base_script.py**. This script can be used to do the inference using FourCastNet and the wrapper functions defined in this repository. This repo contains support for quantized weights to reduce model size, torch.compile to reduce inference times, and distributed inference to improve speedup. First, clone the github repo to your favorite computing environment with GPU support. To run this script, follow the steps below:
 1) Install conda environment from the .yml file
      conda env create -f environment.yml
 2) Determine desired parameters for testing. The switch options are:
-     --torch.compile: This switch will turn on usage of torch.compile, which pre-compiles the code to enable speedup.
-     --quantization: This switch will turn on int8 quantization of the linear layer model weights, reducing the size of the model overall.
-     --distributed: This switch determines whether you're running the inference across multiple GPUs or not. Doing so can reduce runtimes. This uses the Hugging Face Accelerate package: https://huggingface.co/docs/diffusers/en/training/distributed_inference
-     --prediction-length: This parameter controls the number of timesteps for the autoregressive loop used during inference. Each timestep corresponds to 6 hours of advancement in weather behavior predicted by FourCastNet
-     --ensemble-size: Size of ensemble you want to use. The ensemble is the set of randomly perturbed inputs fed to the inference model. These inputs are perturbed from real weather forecast data in the ERA5 dataset.
-     --variable: String, variable name you'd like to calculate. The full list of weather variables is provided at the top of the base_script.py file. These include quantities such as wind speeds and temperatures.
+     --**torch.compile**: This switch will turn on usage of torch.compile, which pre-compiles the code to enable speedup.
+     --**quantization**: This switch will turn on int8 quantization of the linear layer model weights, reducing the size of the model overall.
+     --**distributed**: This switch determines whether you're running the inference across multiple GPUs or not. Doing so can reduce runtimes. This uses the Hugging Face Accelerate package: https://huggingface.co/docs/diffusers/en/training/distributed_inference
+     --**prediction-length**: This parameter controls the number of timesteps for the autoregressive loop used during inference. Each timestep corresponds to 6 hours of advancement in weather behavior predicted by FourCastNet
+     --**ensemble-size**: Size of ensemble you want to use. The ensemble is the set of randomly perturbed inputs fed to the inference model. These inputs are perturbed from real weather forecast data in the ERA5 dataset.
+     --**variable**: String, variable name you'd like to calculate. The full list of weather variables is provided at the top of the base_script.py file. These include quantities such as wind speeds and temperatures. A list of these variables used by dependent scripts in this repo can be found in constants.py.
    
-3) Run base script with chosen flags. For a single GPU, you can run the base script in the following way:
-      python base_script.py --torch.compile = False --quantization = False --distributed = False --prediction-length = 20 --ensemble-size = 10 --variable = t500
+3) Install the ccai demo file in your chosen directory with the following lines:
+     wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
+     tar -xvf ccai_demo.tar
+     rm ccai_demo.tar
+5) Modify base_path variable in base_script.py with the path to the ccai_demo file installed
+6) Run base script with chosen flags. For a single GPU, you can run the base script in the following way:
+      **python base_script.py --torch.compile = False --quantization = False --distributed = False --prediction-length = 20 --ensemble-size = 10 --variable = t500**
    For a distributed inference use case, you will need to run using arguments for hugging face accelerate. Here's an example for 4 gpus:
-      CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu base_script.py True True True 20 10 t500
+      **CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu base_script.py True True True 20 10 t500**
+
+   Alternatively, a Jupyter notebook implementation is available in the **base_notebook.ipynb** file provided. Note that if running base_script.py, every input variable must be specified.
 
 
 ## Understanding outputs:
 
-Outputs for each run will be printed to stdout. This includes total runtime for inference as well as average inference time per ensemble member, accuracy, and root mean square errors. These can be visualized in WandB to evaluate performance across multiple tests. Outputs for quantization test can be found in quantization_tests.csv and are plotted in quantization_results.png. Torch.compile test results are saved in torch_compile.csv and plotted in torch_compile_tests.ipynb. Data for distributed inference on Perlmutter with NVIDIA A100 GPUs is saved in distributed_inference.csv. Torch.compile and quanitzation tests can be conducted using the corresponding .py files.
+Outputs for each run will be printed to stdout. This includes total runtime for inference as well as average inference time per ensemble member, accuracy, and root mean square errors. These can be visualized in WandB to evaluate performance across multiple tests. Outputs for quantization test can be found in **quantization_tests.csv** and are plotted in **quantization_results.png**. Torch.compile test results are saved in **torch_compile.csv** and plotted in **torch_compile_tests.ipynb**. Data for distributed inference on Perlmutter with NVIDIA A100 GPUs is saved in **distributed_inference.csv**. Torch.compile and quanitzation tests can be conducted using the corresponding .py files.
 
+## Code structure:
+base script.py processes user inputs from the command line and implements the corresponding test. It does so by calling the inference functions defined in proj_utils.py (for one GPU) and distributed_inference.py (for multi-GPU). It loads the model and computes accuracies and root mean square errors for each timestep using calls to functions defined in proj_utils.py
