@@ -46,3 +46,13 @@ Outputs for each run will be printed to stdout. This includes total runtime for 
 
 ## Code structure:
 base script.py processes user inputs from the command line and implements the corresponding test. It does so by calling the inference functions defined in proj_utils.py (for one GPU) and distributed_inference.py (for multi-GPU). It loads the model and computes accuracies and root mean square errors for each timestep using calls to functions defined in proj_utils.py
+
+
+## Additional Torch Compile Tests, Plots, and Baseline Run
+The torch_compile_test.py script was used to compare various torch.compile() settings and saves 
+benchmark info to a csv. Info on its arguments can be found with python torch_compile.py --help
+
+Similarly, the baseline ensemble run was estimated using python ensemble_script.py --ensemble_size 10
+You can run python ensemble_script.py --help for more info.
+
+Plots for torch compile testing and quantization are in torch_compile_plots.ipynb and plot_quantization.py respectively.
