@@ -80,3 +80,27 @@ Similarly, the baseline ensemble run was estimated using python ensemble_script.
 You can run python ensemble_script.py --help for more info.
 
 Plots for torch compile testing and quantization are in torch_compile_plots.ipynb and plot_quantization.py respectively.
+
+## W and B experiments
+You can find our experiments and data in the Weights and Biases team here: https://wandb.ai/jhalpern-columbia-university/weather-forecast-inference 
+
+## Results
+
+1) Torch.compile() speedup:
+<img width="1078" alt="Screen Shot 2025-05-08 at 9 28 34 PM" src="https://github.com/user-attachments/assets/2389a050-c7ff-4ce4-a6b0-2e2feb0dcb4c" />
+We observed a 30% speedup after using the inductor backend for torch.compile.
+
+2) Quantization model size reduction: 
+
+<img width="499" alt="Screen Shot 2025-05-08 at 9 28 23 PM" src="https://github.com/user-attachments/assets/c6cbb3d9-60e4-4994-8c1d-01b389ff804b" />
+We observed a 58% model size reduction after weight quantization with int8.
+
+3) Distributed Inference speedups:
+ <img width="475" alt="Screen Shot 2025-05-08 at 9 28 42 PM" src="https://github.com/user-attachments/assets/23b757b8-3c6f-4413-a513-cc2d0099d341" />
+We observed a 28% speedup from 1 to 4 GPUs.
+
+4) Compined optimization:
+
+<img width="476" alt="Screen Shot 2025-05-08 at 9 28 48 PM" src="https://github.com/user-attachments/assets/335e8fbf-bf5d-4b2b-a95c-6339b2b26aac" />
+
+After combining all of these optimizations, we achieved a 44% speedup in inference time.
