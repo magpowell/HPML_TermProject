@@ -6,8 +6,57 @@ import torchvision
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import wandb
+from networks.afnonet import AFNONet
 
 from collections import OrderedDict
+
+def make_ensemble_data(data, ensemble_size):
+    if ensemble_size == 1:
+        return data[np.newaxis, :, :, :]
+    
+    hold = data[np.newaxis, :, :, :]
+    ensemble_init = np.tile(hold, (ensemble_size, 1, 1, 1, 1))
+
+    epsilon = 1e-8
+    random_values = np.random.uniform(0, 10, ensemble_size)
+
+    for i in range(ensemble_size):
+        ensemble_init[i, :, :, :] *= epsilon * random_values[i]
+    return ensemble_init
+
+
+def load_data_and_model(base_path, params):
+    # data and model paths
+    data_path = f"{base_path}ccai_demo/data/FCN_ERA5_data_v0/out_of_sample"
+    data_file = os.path.join(data_path, "2018.h5")
+    model_path = f"{base_path}ccai_demo/model_weights/FCN_weights_v0/backbone.ckpt"
+    global_means_path = f"{base_path}ccai_demo/additional/stats_v0/global_means.npy"
+    global_stds_path = f"{base_path}ccai_demo/additional/stats_v0/global_stds.npy"
+    time_means_path = f"{base_path}ccai_demo/additional/stats_v0/time_means.npy"
+
+    # import model
+    device = torch.cuda.current_device() if torch.cuda.is_available() else "cpu"
+
+    # in and out channels: FourCastNet uses 20 input channels corresponding to 20 prognostic variables
+    in_channels = np.array(params.in_channels)
+    out_channels = np.array(params.out_channels)
+    params["N_in_channels"] = len(in_channels)
+    params["N_out_channels"] = len(out_channels)
+    params.means = np.load(global_means_path)[
+        0, out_channels
+    ]  # for normalizing data with precomputed train stats
+    params.stds = np.load(global_stds_path)[0, out_channels]
+    params.time_means = np.load(time_means_path)[0, out_channels]
+
+    # load the model
+    if params.nettype == "afno":
+        model = AFNONet(params).to(device)  # AFNO model
+    else:
+        raise Exception("not implemented")
+    # load saved model weights
+    model = load_model(model, params, model_path)
+    model = model.to(device)
+    return model, data_file, in_channels, device, params
 
 def inference(data_slice, model, prediction_length, idx, params, device, img_shape_x, img_shape_y, std, m, field):
     # torch.compile warmup
