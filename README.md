@@ -27,12 +27,14 @@ Implementation of inference tests is in **base_script.py**. This script can be u
      --**ensemble-size**: Size of ensemble you want to use. The ensemble is the set of randomly perturbed inputs fed to the inference model. These inputs are perturbed from real weather forecast data in the ERA5 dataset.
      --**variable**: String, variable name you'd like to calculate. The full list of weather variables is provided at the top of the base_script.py file. These include quantities such as wind speeds and temperatures. A list of these variables used by dependent scripts in this repo can be found in constants.py.
    
-3) Install the ccai demo file in your chosen directory with the following lines:
+3) Install hugging face packages for multi-gpu:
+        pip install accelerate
+5) Install the ccai demo file in your chosen directory with the following lines:
      wget https://portal.nersc.gov/project/m4134/ccai_demo.tar
      tar -xvf ccai_demo.tar
      rm ccai_demo.tar
-5) Modify base_path variable in base_script.py with the path to the ccai_demo file installed
-6) Run base script with chosen flags. For a single GPU, you can run the base script in the following way:
+6) Modify base_path variable in base_script.py with the path to the ccai_demo file installed
+7) Run base script with chosen flags. For a single GPU, you can run the base script in the following way:
       **python base_script.py --torch.compile = False --quantization = False --distributed = False --prediction-length = 20 --ensemble-size = 10 --variable = t500**
    For a distributed inference use case, you will need to run using arguments for hugging face accelerate. Here's an example for 4 gpus:
       **CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu base_script.py True True True 20 10 t500**
