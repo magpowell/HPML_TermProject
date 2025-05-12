@@ -1,17 +1,10 @@
-from diffusers import DiffusionPipeline
 from accelerate import Accelerator
 from accelerate.utils import gather_object
 from tqdm import tqdm
-from datasets import load_dataset
-import wandb
 import torch
 import time
-import os
-import fire
-import sys
-import numpy as np
 
-from proj_utils import load_model, inference, lat, latitude_weighting_factor
+from proj_utils import lat, latitude_weighting_factor
 
 # A modified version of the inference script from project_utils.py
 # Adapted for distributed learning across GPUs
@@ -42,8 +35,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
     # Use Accelerator() for distribution
     accelerator = Accelerator()
     device = accelerator.device
-#    print(f"[Rank {accelerator.process_index}] using {accelerator.device}")
-    print(f"Number of GPUs: {accelerator.num_processes}")
+    n_gpu = accelerator.num_processes
     # Prepare model with Accelerator
     model = accelerator.prepare(model)
     # Distribute ensemble indices
@@ -56,8 +48,6 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         
         data_slice = ensemble_init[ens] 
         data_slice = torch.tensor(data_slice, device=device, dtype=torch.float)
-        print('Data slice shape:')
-        print(data_slice.shape)
         
         # torch.compile warmup
         with torch.no_grad():
@@ -112,6 +102,7 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         ens_idx_results.append({
             "total_inference_time_for_ensemble": total_time_ensemble,
             "ensemble_idx": ens,
+            "n_gpu": n_gpu,
         })
         total_time_elapsed += total_time_ensemble
 
@@ -125,4 +116,4 @@ def inference_ensemble(ensemble_init, model, prediction_length, idx, params, dev
         print(f"\nTotal elapsed inference time across {ensemble_size} ensembles: {total_time_elapsed:.4f} seconds")
         print(f"Average time per ensemble member: {avg_time:.4f} seconds")
 
-    return all_results if accelerator.is_main_process else None
+    return all_results

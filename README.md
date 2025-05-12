@@ -63,7 +63,8 @@ Implementation of inference tests is in **base_script.py**. This script can be u
 
 Install conda environment from the .yml file 
 ```   
-     conda env create -f environment.yml 
+     conda env create -f environment.yml
+     conda activate hpml_env 
 ```
  Install hugging face packages for multi-gpu: 
  ```  
@@ -77,7 +78,7 @@ Install the ccai demo file in your chosen directory with the following lines:
    
      rm ccai_demo.tar 
 ```   
-Modify base_path variable in base_script.py with the path to the ccai_demo file installed
+pass  ``` --base_path <PATH_TO_YOUR_DATA_FROM_STEP_2>   ```  to base_script.py with the path to the data from ccai_demo.tar
 
 ---
 
@@ -89,45 +90,59 @@ You can find our experiments and data in the Weights and Biases team here: https
 
 ### C. Specify for Training or For Inference or if Both 
 
-To train the model from scratch:
-```bash
-python train.py --config configs/default.yaml
-```
+The project is focused on inference only. To compare the baseline run to the run with all optimizations run:
 
----
+
+ ```  
+     python base_script.py --ensemble_size 10 
+ ``` 
+
+ and
+
+  ```  
+     accelerate launch --multi_gpu --num_processes=4 base_script.py --distributed --ensemble_size 10 --compile --quantize
+ ``` 
 
 ### D. Evaluation
 
-Determine desired parameters for testing. The switch options are:
+Determine desired parameters for testing. The options are:
 
-     --**torch.compile**: This switch will turn on usage of torch.compile, which pre-compiles the code to enable speedup.
+     --**compile**: This switch will turn on usage of torch.compile, which pre-compiles the code to enable speedup.
    
-     --**quantization**: This switch will turn on int8 quantization of the linear layer model weights, reducing the size of the model overall.
+     --**qunatize**: This switch will turn on int8 quantization of the linear layer model weights, reducing the size of the model overall.
    
      --**distributed**: This switch determines whether you're running the inference across multiple GPUs or not. Doing so can reduce runtimes. This uses the Hugging Face Accelerate package: https://huggingface.co/docs/diffusers/en/training/distributed_inference
    
-     --**prediction-length**: This parameter controls the number of timesteps for the autoregressive loop used during inference. Each timestep corresponds to 6 hours of advancement in weather behavior predicted by FourCastNet
+     --**prediction_length**: This parameter controls the number of timesteps for the autoregressive loop used during inference. Each timestep corresponds to 6 hours of advancement in weather behavior predicted by FourCastNet
    
-     --**ensemble-size**: Size of ensemble you want to use. The ensemble is the set of randomly perturbed inputs fed to the inference model. These inputs are perturbed from real weather forecast data in the ERA5 dataset.
-     --**variable**: String, variable name you'd like to calculate. The full list of weather variables is provided at the top of the base_script.py file. These include quantities such as wind speeds and temperatures. A list of these variables used by dependent scripts in this repo can be found in constants.py.
+     --**ensemble_size**: Size of ensemble you want to use. The ensemble is the set of randomly perturbed inputs fed to the inference model. These inputs are perturbed from real weather forecast data in the ERA5 dataset
 
+     --**field**: String, variable name you'd like to calculate. The full list of weather variables is provided at the top of the base_script.py file. These include quantities such as wind speeds and temperatures. A list of these variables used by dependent scripts in this repo can be found in constants.py.
 
-Run base script with chosen flags. For a single GPU, you can run the base script in the following way:
-   
-      **python base_script.py --torch.compile = False --quantization = False --distributed = False --prediction-length = 20 --ensemble-size = 10 --variable = t500**
-   
-   For a distributed inference use case, you will need to run using arguments for hugging face accelerate. Here's an example for 4 gpus:
-   
-      **CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu base_script.py True True True 20 10 t500** 
+For more information simply run:
 
+```
+python base_script.py --help
+```
+
+Run base script with chosen flags. 
+
+For a single GPU, you can run the base script in the following way:
+   
+     python base_script.py --ensemble_size 10
+     python base_script.py --ensemble_size 10 --quantize --compile
+   
+
+For a distributed inference use case, you will need to run using arguments for hugging face accelerate. Here's an example for 4 gpus:
+   
+     accelerate launch --multi_gpu --num_processes=4 base_script.py --distributed --ensemble_size 10
 
 Alternatively, a Jupyter notebook implementation is available in the **base_notebook.ipynb** file provided. Note that if running base_script.py, every input variable must be specified. 
 
 The torch_compile_test.py script was used to compare various torch.compile() settings and saves 
-benchmark info to a csv. Info on its arguments can be found with python torch_compile.py --help
+benchmark info to a csv. Info on its arguments can be found with 
 
-Similarly, the baseline ensemble run was estimated using python ensemble_script.py --ensemble_size 10
-You can run python ensemble_script.py --help for more info.
+     python torch_compile.py --help
 
 Plots for torch compile testing and quantization are in torch_compile_plots.ipynb and plot_quantization.py respectively.
 
@@ -135,21 +150,19 @@ Plots for torch compile testing and quantization are in torch_compile_plots.ipyn
 
 ### E. Quickstart: Minimum Reproducible Result
 
-EXAMPLE BELOW-- REPLACE
-To reproduce our minimum reported result (e.g., XX.XX% accuracy), run:
-
 ```bash
 # Step 1: Set up environment
-pip install -r requirements.txt
+conda env create -f environment.yml 
+conda activate hpml_env
+pip install accelerate
 
 # Step 2: Download dataset
-bash scripts/download_dataset.sh  # if applicable
+wget https://portal.nersc.gov/project/m4134/ccai_demo.tar 
+tar -xvf ccai_demo.tar 
+rm ccai_demo.tar 
 
-# Step 3: Run training (or skip if checkpoint is provided)
-python train.py --config configs/default.yaml
-
-# Step 4: Evaluate
-python eval.py --weights checkpoints/best_model.pth
+# Step 3: Inference
+python base_scripy.py --base_path <PATH_TO_YOUR_DATA_FROM_STEP_2>
 ```
 
 ---
@@ -157,5 +170,11 @@ python eval.py --weights checkpoints/best_model.pth
 
 ## Notes-- Understanding outputs:
 
-Outputs for each run will be printed to stdout. This includes total runtime for inference as well as average inference time per ensemble member, accuracy, and root mean square errors. These can be visualized in WandB to evaluate performance across multiple tests. Outputs for quantization test can be found in **quantization_tests.csv** and are plotted in **quantization_results.png**. Torch.compile test results are saved in **torch_compile.csv** and plotted in **torch_compile_tests.ipynb**. Data for distributed inference on Perlmutter with NVIDIA A100 GPUs is saved in **distributed_inference.csv**. Torch.compile and quanitzation tests can be conducted using the corresponding .py files. 
+Outputs for each run will be printed to stdout. This includes total runtime for inference as well as average inference time per ensemble member, accuracy, and root mean square errors. These can be visualized in WandB to evaluate performance across multiple tests. 
+
+As additional functionality, we've provided the option to pass ```--file_path <NAME_OF_CSV>.csv``` to base_script.py to save total ensemble time and the run configuration to a csv.
+
+Outputs for quantization test can be found in **quantization_tests.csv** and are plotted in **quantization_results.png**. 
+
+Torch.compile test results are saved in **torch_compile.csv** and plotted in **torch_compile_tests.ipynb**. Data for distributed inference on Perlmutter with NVIDIA A100 GPUs is saved in **distributed_inference.csv**. Torch.compile and quanitzation tests can be conducted using the corresponding .py files. 
 
